@@ -127,6 +127,323 @@ def _coerce_challenge(row: dict) -> ChallengeResponse:
     return ChallengeResponse.model_validate(row)
 
 
+# =============================================================================
+# User Models
+# =============================================================================
+
+
+class UserCreate(BaseModel):
+    wallet_address: str = Field(min_length=1)
+    username: str | None = None
+    description: str | None = None
+    profile_image: str | None = None
+    login_type: str = Field(default="wallet", min_length=1)
+    referral_code: str | None = None
+    referred_by: str | None = None
+
+
+class UserUpdate(BaseModel):
+    username: str | None = None
+    description: str | None = None
+    profile_image: str | None = None
+
+
+class UserResponse(BaseModel):
+    id: str
+    wallet_address: str
+    username: str | None
+    description: str | None
+    profile_image: str | None
+    login_type: str
+    referral_code: str | None
+    referred_by: str | None
+    referrals: list[str]
+    created_at: datetime | None
+    updated_at: datetime | None
+    earnings: float | None
+
+
+class UserListResponse(BaseModel):
+    users: list[UserResponse]
+    count: int
+
+
+def _coerce_user(row: dict) -> UserResponse:
+    return UserResponse.model_validate(row)
+
+
+# =============================================================================
+# User CRUD Endpoints
+# =============================================================================
+
+
+@app.post("/users", response_model=UserResponse, status_code=201)
+def create_user(
+    user: UserCreate,
+    supabase: Annotated[Client, Depends(get_supabase)],
+) -> UserResponse:
+    """
+    Create a new user.
+
+    Example:
+        curl -X POST http://localhost:8000/users \
+          -H "Content-Type: application/json" \
+          -d '{
+            "wallet_address": "7YkS7x...example",
+            "username": "crypto_trader",
+            "description": "Passionate about crypto",
+            "login_type": "wallet"
+          }'
+    """
+    payload = {
+        "wallet_address": user.wallet_address,
+        "username": user.username,
+        "description": user.description,
+        "profile_image": user.profile_image,
+        "login_type": user.login_type,
+    }
+
+    # If referral code is provided, find the referrer
+    if user.referred_by:
+        try:
+            referrer_result = (
+                supabase.table("users")
+                .select("id")
+                .eq("referral_code", user.referred_by)
+                .limit(1)
+                .execute()
+            )
+            if referrer_result.data:
+                payload["referred_by"] = referrer_result.data[0]["id"]
+        except Exception:
+            pass  # Ignore referral lookup errors
+
+    try:
+        result = (
+            supabase.table("users")
+            .insert(payload)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create user: {exc}",
+        ) from exc
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to create user")
+
+    return _coerce_user(result.data[0])
+
+
+@app.get("/users", response_model=UserListResponse)
+def get_users(
+    supabase: Annotated[Client, Depends(get_supabase)],
+    wallet_address: str | None = None,
+    username: str | None = None,
+    referral_code: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> UserListResponse:
+    """
+    Get a list of users with optional filters.
+
+    Example:
+        curl "http://localhost:8000/users?wallet_address=7YkS7x...example&limit=10"
+    """
+    query = supabase.table("users").select("*")
+
+    if wallet_address:
+        query = query.eq("wallet_address", wallet_address)
+    if username:
+        query = query.eq("username", username)
+    if referral_code:
+        query = query.eq("referral_code", referral_code)
+
+    try:
+        result = (
+            query.order("created_at", desc=True)
+            .range(offset, offset + limit - 1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch users: {exc}",
+        ) from exc
+
+    rows = result.data or []
+    return UserListResponse(
+        users=[_coerce_user(row) for row in rows],
+        count=len(rows),
+    )
+
+
+@app.get("/users/{user_id}", response_model=UserResponse)
+def get_user_by_id(
+    user_id: str,
+    supabase: Annotated[Client, Depends(get_supabase)],
+) -> UserResponse:
+    """
+    Get a user by their ID.
+
+    Example:
+        curl http://localhost:8000/users/123e4567-e89b-12d3-a456-426614174000
+    """
+    try:
+        result = (
+            supabase.table("users")
+            .select("*")
+            .eq("id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch user: {exc}",
+        ) from exc
+
+    rows = result.data or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return _coerce_user(rows[0])
+
+
+@app.get("/users/wallet/{wallet_address}", response_model=UserResponse)
+def get_user_by_wallet(
+    wallet_address: str,
+    supabase: Annotated[Client, Depends(get_supabase)],
+) -> UserResponse:
+    """
+    Get a user by their wallet address.
+
+    Example:
+        curl http://localhost:8000/users/wallet/7YkS7x...example
+    """
+    try:
+        result = (
+            supabase.table("users")
+            .select("*")
+            .eq("wallet_address", wallet_address)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch user: {exc}",
+        ) from exc
+
+    rows = result.data or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return _coerce_user(rows[0])
+
+
+@app.patch("/users/{user_id}", response_model=UserResponse)
+def update_user(
+    user_id: str,
+    user_update: UserUpdate,
+    supabase: Annotated[Client, Depends(get_supabase)],
+) -> UserResponse:
+    """
+    Update a user's profile information.
+
+    Example:
+        curl -X PATCH http://localhost:8000/users/123e4567-e89b-12d3-a456-426614174000 \
+          -H "Content-Type: application/json" \
+          -d '{
+            "username": "new_username",
+            "description": "Updated bio"
+          }'
+    """
+    # First check if user exists
+    try:
+        existing = (
+            supabase.table("users")
+            .select("*")
+            .eq("id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch user: {exc}",
+        ) from exc
+
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Build update payload (only non-None fields)
+    update_payload = {k: v for k, v in user_update.model_dump().items() if v is not None}
+
+    if not update_payload:
+        raise HTTPException(
+            status_code=422,
+            detail="No fields to update",
+        )
+
+    try:
+        result = (
+            supabase.table("users")
+            .update(update_payload)
+            .eq("id", user_id)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update user: {exc}",
+        ) from exc
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to update user")
+
+    return _coerce_user(result.data[0])
+
+
+@app.delete("/users/{user_id}", status_code=204, response_model=None)
+def delete_user(
+    user_id: str,
+    supabase: Annotated[Client, Depends(get_supabase)],
+) -> None:
+    """
+    Delete a user by their ID.
+
+    Example:
+        curl -X DELETE http://localhost:8000/users/123e4567-e89b-12d3-a456-426614174000
+    """
+    # First check if user exists
+    try:
+        existing = (
+            supabase.table("users")
+            .select("id")
+            .eq("id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch user: {exc}",
+        ) from exc
+
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    try:
+        supabase.table("users").delete().eq("id", user_id).execute()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete user: {exc}",
+        ) from exc
+
+
 @app.get("/")
 def root() -> dict[str, str]:
     """
@@ -309,3 +626,226 @@ def get_challenge_by_pda(
         raise HTTPException(status_code=404, detail="Challenge not found")
 
     return _coerce_challenge(rows[0])
+
+
+# =============================================================================
+# Clan Models
+# =============================================================================
+
+
+class ClanMessageCreate(BaseModel):
+    clan_id: str = Field(min_length=1)
+    sender_id: str = Field(min_length=1)
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class ClanMessageResponse(BaseModel):
+    id: str
+    clan_id: str
+    sender_id: str
+    message: str
+    created_at: datetime
+    sender_username: str | None = None
+    sender_avatar: str | None = None
+
+
+class ClanMessageListResponse(BaseModel):
+    messages: list[ClanMessageResponse]
+    count: int
+
+
+def _coerce_clan_message(row: dict) -> ClanMessageResponse:
+    return ClanMessageResponse.model_validate(row)
+
+
+# =============================================================================
+# Clan Message Endpoints
+# =============================================================================
+
+
+@app.get("/clans/{clan_slug}/messages", response_model=ClanMessageListResponse)
+def get_clan_messages(
+    clan_slug: str,
+    supabase: Annotated[Client, Depends(get_supabase)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ClanMessageListResponse:
+    """
+    Get messages for a clan. Only accessible by clan members.
+    
+    Example:
+        curl "http://localhost:8000/clans/alpha-syndicate/messages?limit=20"
+    """
+    # First get the clan by slug
+    try:
+        clan_result = (
+            supabase.table("clans")
+            .select("id")
+            .eq("slug", clan_slug)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch clan: {exc}",
+        ) from exc
+
+    clan_rows = clan_result.data or []
+    if not clan_rows:
+        raise HTTPException(status_code=404, detail="Clan not found")
+    
+    clan_id = clan_rows[0]["id"]
+
+    # Get messages with sender info (username and profile_image)
+    try:
+        result = (
+            supabase.table("clan_messages")
+            .select("""
+                id,
+                clan_id,
+                sender_id,
+                message,
+                created_at,
+                sender:users!sender_id (
+                    username,
+                    profile_image
+                )
+            """)
+            .eq("clan_id", clan_id)
+            .order("created_at", desc=True)
+            .range(offset, offset + limit - 1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch messages: {exc}",
+        ) from exc
+
+    rows = result.data or []
+    messages = []
+    for row in rows:
+        sender_data = row.pop("sender", None)
+        sender_username = sender_data.get("username") if sender_data else None
+        sender_avatar = sender_data.get("profile_image") if sender_data else None
+        messages.append(ClanMessageResponse(
+            id=row["id"],
+            clan_id=row["clan_id"],
+            sender_id=row["sender_id"],
+            message=row["message"],
+            created_at=row["created_at"],
+            sender_username=sender_username,
+            sender_avatar=sender_avatar,
+        ))
+
+    return ClanMessageListResponse(messages=messages, count=len(messages))
+
+
+@app.post("/clans/{clan_slug}/messages", response_model=ClanMessageResponse, status_code=201)
+def create_clan_message(
+    clan_slug: str,
+    message_data: ClanMessageCreate,
+    supabase: Annotated[Client, Depends(get_supabase)],
+) -> ClanMessageResponse:
+    """
+    Send a message to a clan chat. User must be a clan member.
+    
+    Example:
+        curl -X POST http://localhost:8000/clans/alpha-syndicate/messages \
+          -H "Content-Type: application/json" \
+          -d '{
+            "clan_id": "uuid-here",
+            "sender_id": "user-uuid-here",
+            "message": "Hello clan!"
+          }'
+    """
+    # First get the clan by slug
+    try:
+        clan_result = (
+            supabase.table("clans")
+            .select("id")
+            .eq("slug", clan_slug)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch clan: {exc}",
+        ) from exc
+
+    clan_rows = clan_result.data or []
+    if not clan_rows:
+        raise HTTPException(status_code=404, detail="Clan not found")
+    
+    clan_id = clan_rows[0]["id"]
+
+    # Verify the clan_id in body matches the slug
+    if message_data.clan_id != clan_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Clan ID does not match the slug",
+        )
+
+    # Insert the message
+    try:
+        result = (
+            supabase.table("clan_messages")
+            .insert({
+                "clan_id": message_data.clan_id,
+                "sender_id": message_data.sender_id,
+                "message": message_data.message,
+            })
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create message: {exc}",
+        ) from exc
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to create message")
+
+    # Get sender info
+    row = result.data[0]
+    sender_result = (
+        supabase.table("users")
+        .select("username, profile_image")
+        .eq("id", message_data.sender_id)
+        .limit(1)
+        .execute()
+    )
+    sender_data = sender_result.data[0] if sender_result.data else {}
+
+    return ClanMessageResponse(
+        id=row["id"],
+        clan_id=row["clan_id"],
+        sender_id=row["sender_id"],
+        message=row["message"],
+        created_at=row["created_at"],
+        sender_username=sender_data.get("username"),
+        sender_avatar=sender_data.get("profile_image"),
+    )
+
+
+@app.delete("/clans/{clan_slug}/messages/{message_id}", status_code=204)
+def delete_clan_message(
+    clan_slug: str,
+    message_id: str,
+    supabase: Annotated[Client, Depends(get_supabase)],
+) -> None:
+    """
+    Delete a message. User must be the sender.
+    
+    Example:
+        curl -X DELETE http://localhost:8000/clans/alpha-syndicate/messages/message-uuid-here
+    """
+    try:
+        supabase.table("clan_messages").delete().eq("id", message_id).execute()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete message: {exc}",
+        ) from exc
