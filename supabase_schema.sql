@@ -13,6 +13,9 @@ create table if not exists public.challenges (
 
   ticker text, -- optional (BTC, AAPL, etc)
 
+  mode text, -- prediction mode (binary, range, etc)
+  total_pool bigint default 0, -- total pool amount
+
   created_by text references users(wallet_address) on delete set null,
 
   status text not null default 'open',

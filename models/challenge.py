@@ -26,6 +26,8 @@ class ChallengeCreate(BaseModel):
     subcategory: str | None = None
     event_type: EventType
     ticker: str | None = None
+    mode: str | None = None
+    total_pool: int | None = None
     created_by: str | None = None
     resolution_source: str | None = None
     resolution_details: dict | None = None
@@ -42,6 +44,8 @@ class ChallengeUpdate(BaseModel):
     subcategory: str | None = None
     event_type: EventType | None = None
     ticker: str | None = None
+    mode: str | None = None
+    total_pool: int | None = None
     status: ChallengeStatus | None = None
     resolution_source: str | None = None
     resolution_details: dict | None = None
@@ -59,6 +63,8 @@ class ChallengeResponse(BaseModel):
     subcategory: str | None
     event_type: str
     ticker: str | None
+    mode: str | None
+    total_pool: int | None
     created_by: str | None
     status: str
     resolution_source: str | None
