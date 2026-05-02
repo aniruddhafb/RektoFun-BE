@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from models.challenge_side import SideKey
+
 
 class ChallengeStatus(str, Enum):
     open = "open"
@@ -123,6 +125,6 @@ class ChallengeListResponse(BaseModel):
 
 class ChallengeAccept(BaseModel):
     challenge_id: UUID
-    user_id: str
+    user_id: str 
     side: SideKey
     bet_amount: int = Field(ge=1)
