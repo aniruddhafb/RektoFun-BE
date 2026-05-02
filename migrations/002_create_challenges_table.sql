@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.challenges (
     event_type text NOT NULL,
     ticker text,
     mode text,
-    total_pool bigint DEFAULT 0,
+    totalPool bigint DEFAULT 0,
     created_by text REFERENCES users(wallet_address) ON DELETE SET NULL,
     status text NOT NULL DEFAULT 'open',
     resolution_source text,
