@@ -27,6 +27,7 @@ class ClanMemberInfo(BaseModel):
     profile_image: str | None = None
     earnings: float | None = None
     role: str  # "Leader" or "Member"
+    wallet_address: str | None = None
 
 
 class ClanMembersResponse(BaseModel):
@@ -330,7 +331,7 @@ def get_clan_members(
         # Fetch all users in the clan_members array
         users_result = (
             supabase.table("users")
-            .select("id, username, profile_image, earnings")
+            .select("id, username, profile_image, earnings, wallet_address")
             .in_("id", member_ids)
             .execute()
         )
@@ -350,6 +351,7 @@ def get_clan_members(
             username=user.get("username"),
             profile_image=user.get("profile_image"),
             earnings=user.get("earnings"),
+            wallet_address=user.get("wallet_address"),
             role="Leader" if user["id"] == clan_leader else "Member",
         ))
 
@@ -397,7 +399,7 @@ def get_clan_messages(
         try:
             sender_result = (
                 supabase.table("users")
-                .select("username, profile_image")
+                .select("username, profile_image, wallet_address")
                 .eq("id", row["sender_id"])
                 .limit(1)
                 .execute()
@@ -405,6 +407,7 @@ def get_clan_messages(
             if sender_result.data:
                 sender_username = sender_result.data[0].get("username")
                 sender_avatar = sender_result.data[0].get("profile_image")
+                sender_wallet_address = sender_result.data[0].get("wallet_address")
         except Exception as e:
             print(f"Failed to fetch sender {row['sender_id']}: {e}")
         
@@ -412,6 +415,7 @@ def get_clan_messages(
             id=row["id"],
             clan_id=row["clan_id"],
             sender_id=row["sender_id"],
+            sender_walletAddress=sender_result.data[0].get("wallet_address") if sender_result.data else None,
             message=row["message"],
             created_at=row["created_at"],
             sender_username=sender_username,
@@ -470,7 +474,7 @@ def create_clan_message(
     row = result.data[0]
     sender_result = (
         supabase.table("users")
-        .select("username, profile_image")
+        .select("username, profile_image, wallet_address")
         .eq("id", message_data.sender_id)
         .limit(1)
         .execute()
@@ -481,6 +485,7 @@ def create_clan_message(
         id=row["id"],
         clan_id=row["clan_id"],
         sender_id=row["sender_id"],
+        sender_walletAddress=sender_data.get("wallet_address"),
         message=row["message"],
         created_at=row["created_at"],
         sender_username=sender_data.get("username"),

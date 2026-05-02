@@ -35,6 +35,7 @@ class ClanResponse(BaseModel):
     clan_image: Optional[str] = None
     max_members: int
     clan_leader: str
+    leader_wallet: Optional[str] = None
     clan_members: List[str] = []
     clan_status: str
     clan_region: Optional[str] = None
@@ -52,6 +53,7 @@ class ClanMessageResponse(BaseModel):
     id: str
     clan_id: str
     sender_id: str
+    sender_walletAddress: str | None = None
     message: str
     created_at: datetime
     sender_username: str | None = None
