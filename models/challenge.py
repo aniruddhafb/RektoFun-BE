@@ -76,6 +76,8 @@ class ChallengeUpdate(BaseModel):
     max_accept_bet: int | None = None
     min_bet: int | None = None
     bet_unit: int | None = None
+    total_challengers: int | None = None
+    total_opponents: int | None = None
     status: ChallengeStatus | None = None
     resolution_status: ResolutionStatus | None = None
     resolution_mode: ResolutionMode | None = None
@@ -104,6 +106,8 @@ class ChallengeResponse(BaseModel):
     min_bet: int
     bet_unit: int
     total_pool: int
+    total_challengers: int
+    total_opponents: int
     status: str
     resolution_status: str
     resolution_mode: str
@@ -118,8 +122,29 @@ class ChallengeResponse(BaseModel):
     updated_at: datetime | None
 
 
+class EnrichedChallengeResponse(BaseModel):
+    id: str
+    title: str
+    mode: str
+    initial_bet: int
+    min_accept_bet: int | None
+    max_accept_bet: int | None
+    min_bet: int
+    total_pool: int
+    status: str
+    expire_time: datetime
+    resolve_time: datetime | None
+    resolved_at: datetime | None
+    result: dict | None
+    created_at: datetime | None
+    total_challengers: int
+    total_opponents: int
+    market: dict | None = Field(description="Market info: name, image, icon, parent_id")
+    creator: dict | None = Field(description="Creator info: username, profile_image")
+    opponent_info: dict | None = Field(description="First challenge_side data with SideKey = opponent")
+
 class ChallengeListResponse(BaseModel):
-    challenges: list[ChallengeResponse]
+    challenges: list[EnrichedChallengeResponse]
     count: int
 
 

@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS public.challenges (
     resolve_time timestamptz,
     result jsonb,
     metadata jsonb,
+    total_challengers int DEFAULT 1,
+    total_opponents int DEFAULT 0,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
 );

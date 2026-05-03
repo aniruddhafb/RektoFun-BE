@@ -26,7 +26,7 @@ def coerce_position(row: dict) -> PositionResponse:
 def create_position(
     position: PositionCreate,
     supabase: Annotated[Client, Depends(get_supabase)],
-) -> PositionResponse:
+) -> dict:
     """
     Create a new position.
 
@@ -57,7 +57,7 @@ def create_position(
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to insert position")
 
-    return coerce_position(result.data[0])
+    return {"status": "ok"}
 
 
 @router.get("", response_model=PositionListResponse)

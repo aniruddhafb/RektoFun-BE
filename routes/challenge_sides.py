@@ -25,7 +25,7 @@ def coerce_challenge_side(row: dict) -> ChallengeSideResponse:
 def create_challenge_side(
     side: ChallengeSideCreate,
     supabase: Annotated[Client, Depends(get_supabase)],
-) -> ChallengeSideResponse:
+) -> dict:
     """
     Create a new challenge side.
 
@@ -56,7 +56,7 @@ def create_challenge_side(
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to insert challenge side")
 
-    return coerce_challenge_side(result.data[0])
+    return {"status": "ok"}
 
 
 @router.get("", response_model=ChallengeSideListResponse)
