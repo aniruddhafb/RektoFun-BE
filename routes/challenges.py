@@ -8,12 +8,13 @@ from supabase import Client
 
 from config import get_supabase
 from models.challenge import (
-    ChallengeAccept,
+    ChallengeJoin,
     ChallengeCreate,
     ChallengeListResponse,
     ChallengeResponse,
     ChallengeStatus,
     ChallengeUpdate,
+    EnrichedChallengeResponse
 )
 from models.challenge_side import SideKey
 from utils import serialize_payload
@@ -21,15 +22,59 @@ from utils import serialize_payload
 router = APIRouter(prefix="/challenges", tags=["challenges"])
 
 
-def coerce_challenge(row: dict) -> ChallengeResponse:
-    return ChallengeResponse.model_validate(row)
+def coerce_challenge(row: dict, supabase: Client) -> EnrichedChallengeResponse:
+    # 1. Market Info
+    market_id = row.get("category")
+    market_info = None
+    if market_id:
+        market_res = supabase.table("markets").select("name, image, icon, parent_id").eq("id", market_id).single().execute()
+        market_info = market_res.data
+
+    # 2. Creator Info
+    creator_id = row.get("created_by")
+    creator_info = None
+    if creator_id:
+        user_res = supabase.table("users").select("username, profile_image", "wallet_address").eq("id", creator_id).single().execute()
+        creator_info = user_res.data
+
+    # 3. Opponent Info
+    opponent_info = None
+    sides_res = supabase.table("challenge_sides").select("*").eq("challenge_id", row.get("id")).eq("side_key", SideKey.OPPONENT.value).execute()
+    if sides_res.data and len(sides_res.data) > 0:
+        opponent_side = sides_res.data[0]
+        opponent_id = opponent_side.get("user_id")
+        if opponent_id:
+            user_res = supabase.table("users").select("username, profile_image", "wallet_address").eq("id", opponent_id).single().execute()
+            opponent_info = user_res.data
+
+    return EnrichedChallengeResponse(
+        id=row["id"],
+        title=row["title"],
+        mode=row["mode"],
+        initial_bet=row["initial_bet"],
+        min_accept_bet=row.get("min_accept_bet"),
+        max_accept_bet=row.get("max_accept_bet"),
+        min_bet=row["min_bet"],
+        total_pool=row["total_pool"],
+        status=row["status"],
+        expire_time=row["expire_time"],
+        resolve_time=row.get("resolve_time"),
+        resolved_at=row.get("resolved_at"),
+        result=row.get("result"),
+        created_at=row.get("created_at"),
+        total_challengers=row["total_challengers"],
+        total_opponents=row["total_opponents"],
+        market=market_info,
+        creator=creator_info,
+        opponent_info=opponent_info
+    )
 
 
-@router.post("", response_model=ChallengeResponse, status_code=201)
+@router.post("", status_code=201)
 def create_challenge(
     challenge: ChallengeCreate,
     supabase: Annotated[Client, Depends(get_supabase)],
-) -> ChallengeResponse:
+) -> dict:
     """
     Create a new challenge.
 
@@ -40,7 +85,6 @@ def create_challenge(
             "title": "Will BTC reach $100k by end of 2025?",
             "description": "Binary prediction market for Bitcoin price",
             "category": "crypto",
-            "subcategory": "btc",
             "event_type": "binary",
             "ticker": "BTC",
             "mode": "pool",
@@ -58,6 +102,8 @@ def create_challenge(
         "resolution_status": "pending",
         "resolution_mode": "at_time",
         "total_pool": 0,
+        "total_challengers": 1,
+        "total_opponents": 0,
     })
 
     try:
@@ -78,11 +124,12 @@ def create_challenge(
     challenge_row = result.data[0]
     challenge_id = challenge_row["id"]
 
-    # Create challenge side (supporter)
+    # Create challenge side (challenger)
     side_payload = serialize_payload({
         "challenge_id": challenge_id,
-        "side_key": SideKey.SUPPORTER.value,
-        "display_name": SideKey.SUPPORTER.value,
+        "user_id": challenge.created_by,
+        "side_key": SideKey.CHALLENGER.value,
+        "display_name": SideKey.CHALLENGER.value,
         "total_amount": challenge.initial_bet,
     })
 
@@ -125,7 +172,7 @@ def create_challenge(
                 detail=f"Failed to insert position: {exc}",
             ) from exc
 
-    return coerce_challenge(challenge_row)
+    return {"status": "ok"}
 
 
 @router.get("", response_model=ChallengeListResponse)
@@ -140,12 +187,12 @@ def get_challenges(
 ) -> ChallengeListResponse:
     """
     Get a list of challenges with optional filters.
-
+ 
     Example:
         curl "http://localhost:8000/challenges?status=open&category=123e4567-e89b-12d3-a456-426614174000&ticker=BTC&limit=10&offset=0"
     """
     query = supabase.table("challenges").select("*")
-
+ 
     if status is not None:
         query = query.eq("status", status.value)
     if category:
@@ -154,7 +201,7 @@ def get_challenges(
         query = query.eq("ticker", ticker)
     if created_by:
         query = query.eq("created_by", created_by)
-
+ 
     try:
         result = (
             query.order("created_at", desc=True)
@@ -166,10 +213,10 @@ def get_challenges(
             status_code=500,
             detail=f"Failed to fetch challenges: {exc}",
         ) from exc
-
+ 
     rows = result.data or []
     return ChallengeListResponse(
-        challenges=[coerce_challenge(row) for row in rows],
+        challenges=[coerce_challenge(row, supabase) for row in rows],
         count=len(rows),
     )
 
@@ -305,20 +352,75 @@ def delete_challenge(
         ) from exc
 
 
-@router.post("/accept", status_code=201)
-def accept_challenge(
-    accept_data: ChallengeAccept,
+@router.post("/join", status_code=201)
+def join_challenge(
+    join_data: ChallengeJoin,
     supabase: Annotated[Client, Depends(get_supabase)],
 ) -> dict:
     """
-    Accept a challenge by creating a side and a position.
+    Join a challenge by creating a side and a position.
     """
+    # Fetch challenge data to update counts
+    try:
+        challenge_result = (
+            supabase.table("challenges")
+            .select("total_challengers, total_opponents")
+            .eq("id", join_data.challenge_id)
+            .single()
+            .execute()
+        )
+        if not challenge_result.data:
+            raise HTTPException(status_code=404, detail="Challenge not found")
+        
+        challenge_data = challenge_result.data
+        
+        # Determine which count to increment
+        update_payload = {}
+        if join_data.side == SideKey.CHALLENGER:
+            update_payload["total_challengers"] = (challenge_data.get("total_challengers") or 0) + 1
+        elif join_data.side == SideKey.OPPONENT:
+            update_payload["total_opponents"] = (challenge_data.get("total_opponents") or 0) + 1
+        
+        if update_payload:
+            supabase.table("challenges").update(serialize_payload(update_payload)).eq("id", join_data.challenge_id).execute()
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update challenge counts: {exc}",
+        ) from exc
+
+    # Check if user has already joined this challenge
+    try:
+        existing_position = (
+            supabase.table("positions")
+            .select("id")
+            .eq("challenge_id", join_data.challenge_id)
+            .eq("user_id", join_data.user_id)
+            .execute()
+        )
+        if existing_position.data:
+            raise HTTPException(
+                status_code=400,
+                detail="User has already joined this challenge"
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to check existing position: {exc}",
+        ) from exc
+
     # 1. Create challenge side
     side_payload = serialize_payload({
-        "challenge_id": accept_data.challenge_id,
-        "side_key": accept_data.side.value,
-        "display_name": accept_data.side.value,
-        "total_amount": accept_data.bet_amount,
+        "challenge_id": join_data.challenge_id,
+        "user_id": join_data.user_id,
+        "side_key": join_data.side.value,
+        "display_name": join_data.side.value,
+        "total_amount": join_data.bet_amount,
     })
 
     try:
@@ -340,10 +442,10 @@ def accept_challenge(
 
     # 2. Create position
     position_payload = serialize_payload({
-        "challenge_id": accept_data.challenge_id,
+        "challenge_id": join_data.challenge_id,
         "side_id": side_id,
-        "user_id": accept_data.user_id,
-        "amount": accept_data.bet_amount,
+        "user_id": join_data.user_id,
+        "amount": join_data.bet_amount,
     })
 
     try:
@@ -361,7 +463,4 @@ def accept_challenge(
     if not position_result.data:
         raise HTTPException(status_code=500, detail="Failed to insert position")
 
-    return {
-        "side_id": side_id,
-        "position_id": position_result.data[0]["id"],
-    }
+    return {"status": "ok"}

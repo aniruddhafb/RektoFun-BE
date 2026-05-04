@@ -8,18 +8,20 @@ from pydantic import BaseModel, Field
 
 
 class SideKey(str, Enum):
-    SUPPORTER = "supporter"
+    CHALLENGER = "challenger"
     OPPONENT = "opponent"
 
 
 class ChallengeSideCreate(BaseModel):
     challenge_id: UUID
+    user_id: UUID
     side_key: SideKey
     display_name: SideKey
     total_amount: int = Field(default=0, ge=0)
 
 
 class ChallengeSideUpdate(BaseModel):
+    user_id: UUID | None = None
     side_key: SideKey | None = None
     display_name: SideKey | None = None
     total_amount: int | None = None
@@ -28,6 +30,7 @@ class ChallengeSideUpdate(BaseModel):
 class ChallengeSideResponse(BaseModel):
     id: str
     challenge_id: UUID
+    user_id: UUID
     side_key: SideKey
     display_name: SideKey
     total_amount: int
