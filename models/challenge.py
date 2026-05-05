@@ -47,6 +47,7 @@ class ChallengeCreate(BaseModel):
     category: str = Field(description="Reference to markets name")
     event_type: EventType
     ticker: str | None = None
+    target_price: int | None = None
     created_by: str | None = None
     mode: Mode = Field(default=Mode.pool)
     initial_bet: int = Field(ge=0)
@@ -68,6 +69,7 @@ class ChallengeUpdate(BaseModel):
     category: str | None = None
     event_type: EventType | None = None
     ticker: str | None = None
+    target_price: int | None = None
     mode: Mode | None = None
     initial_bet: int | None = None
     min_accept_bet: int | None = None
@@ -95,6 +97,7 @@ class ChallengeResponse(BaseModel):
     category: str
     event_type: str
     ticker: str | None
+    target_price: int | None
     created_by: str | None
     mode: str
     initial_bet: int
@@ -124,6 +127,7 @@ class EnrichedChallengeResponse(BaseModel):
     title: str
     mode: str
     initial_bet: int
+    target_price: int | None
     min_accept_bet: int | None
     max_accept_bet: int | None
     min_bet: int

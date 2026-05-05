@@ -52,6 +52,7 @@ def coerce_challenge(row: dict, supabase: Client) -> EnrichedChallengeResponse:
         title=row["title"],
         mode=row["mode"],
         initial_bet=row["initial_bet"],
+        target_price=row.get("target_price"),
         min_accept_bet=row.get("min_accept_bet"),
         max_accept_bet=row.get("max_accept_bet"),
         min_bet=row["min_bet"],
@@ -75,6 +76,7 @@ def coerce_challenge(row: dict, supabase: Client) -> EnrichedChallengeResponse:
 def create_challenge(
     challenge: ChallengeCreate,
     supabase: Annotated[Client, Depends(get_supabase)],
+    target_price: Annotated[int | None, Query()] = None,
 ) -> dict:
     """
     Create a new challenge.
@@ -99,6 +101,7 @@ def create_challenge(
     """
     payload = serialize_payload({
         **challenge.model_dump(),
+        "target_price": target_price if target_price is not None else challenge.target_price,
         "status": ChallengeStatus.open.value,
         "resolution_status": "pending",
         "resolution_mode": "at_time",
