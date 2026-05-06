@@ -45,6 +45,7 @@ class ChallengeCreate(BaseModel):
     title: str = Field(min_length=1)
     description: str | None = None
     category: str = Field(description="Reference to markets name")
+    asset_name: str | None = None
     event_type: EventType
     ticker: str | None = None
     target_price: int | None = None
@@ -67,6 +68,7 @@ class ChallengeUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     category: str | None = None
+    asset_name: str | None = None
     event_type: EventType | None = None
     ticker: str | None = None
     target_price: int | None = None
@@ -95,6 +97,7 @@ class ChallengeResponse(BaseModel):
     title: str
     description: str | None
     category: str
+    asset_name: str | None
     event_type: str
     ticker: str | None
     target_price: int | None
@@ -125,6 +128,7 @@ class ChallengeResponse(BaseModel):
 class EnrichedChallengeResponse(BaseModel):
     id: str
     title: str
+    asset_name: str | None
     mode: str
     initial_bet: int
     target_price: int | None

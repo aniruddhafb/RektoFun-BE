@@ -6,6 +6,7 @@ create table if not exists public.challenges (
   title text not null,
   description text null,
   category text not null,
+  asset_name text null,
   event_type text not null, -- binary, multi_outcome, etc
   ticker text null,
 

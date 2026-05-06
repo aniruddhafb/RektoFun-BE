@@ -50,6 +50,7 @@ def coerce_challenge(row: dict, supabase: Client) -> EnrichedChallengeResponse:
     return EnrichedChallengeResponse(
         id=row["id"],
         title=row["title"],
+        asset_name=row.get("asset_name"),
         mode=row["mode"],
         initial_bet=row["initial_bet"],
         target_price=row.get("target_price"),
@@ -88,6 +89,7 @@ def create_challenge(
             "title": "Will BTC reach $100k by end of 2025?",
             "description": "Binary prediction market for Bitcoin price",
             "category": "crypto",
+            "asset_name": "Bitcoin",
             "event_type": "binary",
             "ticker": "BTC",
             "mode": "pool",
