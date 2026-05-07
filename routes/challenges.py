@@ -234,44 +234,44 @@ def create_challenge(
           }'
     """
 
-    AI_VALIDATED_CATEGORIES = {
-        "ipl",
-        "fifa",
-    }
+    # AI_VALIDATED_CATEGORIES = {
+    #     "ipl",
+    #     "fifa",
+    # }
 
-    if challenge.category.lower() in AI_VALIDATED_CATEGORIES:
+    # if challenge.category.lower() in AI_VALIDATED_CATEGORIES:
 
-        settings = get_settings()
+    #     settings = get_settings()
 
-        validation = validate_and_transform_statement(
-            category=challenge.category,
-            statement=challenge.title,
-            api_key=settings.openai_api_key,
-        )
+    #     validation = validate_and_transform_statement(
+    #         category=challenge.category,
+    #         statement=challenge.title,
+    #         api_key=settings.openai_api_key,
+    #     )
 
-        if validation["status"] != "ok":
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "message": "Invalid challenge title",
-                    "status": validation["status"],
-                    "suggestions": validation["statements"],
-                },
-            )
+    #     if validation["status"] != "ok":
+    #         raise HTTPException(
+    #             status_code=400,
+    #             detail={
+    #                 "message": "Invalid challenge title",
+    #                 "status": validation["status"],
+    #                 "suggestions": validation["statements"],
+    #             },
+    #         )
 
-        # normalize title automatically
-        challenge.title = validation["statements"][0]
+    #     # normalize title automatically
+    #     challenge.title = validation["statements"][0]
 
-        payload = serialize_payload({
-            **challenge.model_dump(),
-            "target_price": target_price if target_price is not None else challenge.target_price,
-            "status": ChallengeStatus.open.value,
-            "resolution_status": "pending",
-            "resolution_mode": "at_time",
-            "total_pool": 0,
-            "total_challengers": 1,
-            "total_opponents": 0,
-        })
+    payload = serialize_payload({
+        **challenge.model_dump(),
+        "target_price": target_price if target_price is not None else challenge.target_price,
+        "status": ChallengeStatus.open.value,
+        "resolution_status": "pending",
+        "resolution_mode": "at_time",
+        "total_pool": 0,
+        "total_challengers": 1,
+        "total_opponents": 0,
+    })
 
     try:
         result = (
