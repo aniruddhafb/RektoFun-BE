@@ -18,6 +18,8 @@ from models.challenge import (
 )
 from models.challenge_side import SideKey
 from utils import serialize_payload
+from routes.transform import transform as _transform, TransformRequest
+from config import get_settings
 
 router = APIRouter(prefix="/challenges", tags=["challenges"])
 
@@ -101,6 +103,20 @@ def create_challenge(
             "resolution_config": {}
           }'
     """
+    # Validate title/category for IPL and FIFA challenges before storing in DB
+    if challenge.category.lower() in ("ipl", "fifa"):
+        try:
+            settings = get_settings()
+            _ = _transform(
+                TransformRequest(
+                    category=challenge.category,
+                    statement=challenge.title,
+                ),
+                settings,
+            )
+        except HTTPException as e:
+            raise HTTPException(status_code=400, detail=e.detail)
+
     payload = serialize_payload({
         **challenge.model_dump(),
         "target_price": target_price if target_price is not None else challenge.target_price,
