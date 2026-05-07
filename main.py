@@ -5,18 +5,35 @@ FastAPI + Supabase backend for persisting challenge metadata after a
 successful Solana transaction.
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
-from routes import challenge_sides, challenges, challenge_outcomes, health, markets, positions, users, clans
+from routes import challenge_sides, challenges, challenge_outcomes, health, markets, positions, users, clans, transform
+from services.birdeye_price_logger import BirdeyePriceLogger
 
-app = FastAPI(title="RektoFun API", version="1.0.0")
+
+settings = get_settings()
+birdeye_price_logger = BirdeyePriceLogger(settings)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    birdeye_price_logger.start()
+    try:
+        yield
+    finally:
+        await birdeye_price_logger.stop()
+
+
+app = FastAPI(title="RektoFun API", version="1.0.0", lifespan=lifespan)
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_settings().cors_origins,
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -26,6 +43,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(users.router)
 app.include_router(challenges.router)
+app.include_router(transform.router)
 app.include_router(challenge_outcomes.router)
 app.include_router(challenge_sides.router)
 app.include_router(positions.router)
