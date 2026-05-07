@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from supabase import Client
 
 from config import get_supabase
+from models import challenge
 from models.challenge import (
     ChallengeJoin,
     ChallengeCreate,
@@ -21,7 +22,7 @@ from models.challenge_side import SideKey
 from utils import serialize_payload
 from routes.transform import transform as _transform, TransformRequest
 from config import get_settings
-
+from services.challenge_ai import validate_and_transform_statement
 router = APIRouter(prefix="/challenges", tags=["challenges"])
 
 
@@ -157,6 +158,7 @@ def enrich_challenges(rows: list[dict], supabase: Client) -> list[EnrichedChalle
             EnrichedChallengeResponse(
                 id=row["id"],
                 title=row["title"],
+                asset_name=row.get("asset_name"),
                 mode=row["mode"],
                 initial_bet=row.get("initial_bet") or 0,
                 target_price=row.get("target_price"),
@@ -209,30 +211,45 @@ def create_challenge(
             "resolution_config": {}
           }'
     """
-    # Validate title/category for IPL and FIFA challenges before storing in DB
-    if challenge.category.lower() in ("ipl", "fifa"):
-        try:
-            settings = get_settings()
-            _ = _transform(
-                TransformRequest(
-                    category=challenge.category,
-                    statement=challenge.title,
-                ),
-                settings,
-            )
-        except HTTPException as e:
-            raise HTTPException(status_code=400, detail=e.detail)
 
-    payload = serialize_payload({
-        **challenge.model_dump(),
-        "target_price": target_price if target_price is not None else challenge.target_price,
-        "status": ChallengeStatus.open.value,
-        "resolution_status": "pending",
-        "resolution_mode": "at_time",
-        "total_pool": 0,
-        "total_challengers": 1,
-        "total_opponents": 0,
-    })
+    AI_VALIDATED_CATEGORIES = {
+        "ipl",
+        "fifa",
+    }
+
+    if challenge.category.lower() in AI_VALIDATED_CATEGORIES:
+
+        settings = get_settings()
+
+        validation = validate_and_transform_statement(
+            category=challenge.category,
+            statement=challenge.title,
+            api_key=settings.openai_api_key,
+        )
+
+        if validation["status"] != "ok":
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Invalid challenge title",
+                    "status": validation["status"],
+                    "suggestions": validation["statements"],
+                },
+            )
+
+        # normalize title automatically
+        challenge.title = validation["statements"][0]
+
+        payload = serialize_payload({
+            **challenge.model_dump(),
+            "target_price": target_price if target_price is not None else challenge.target_price,
+            "status": ChallengeStatus.open.value,
+            "resolution_status": "pending",
+            "resolution_mode": "at_time",
+            "total_pool": 0,
+            "total_challengers": 1,
+            "total_opponents": 0,
+        })
 
     try:
         result = (
@@ -311,7 +328,7 @@ def get_challenges(
     ticker: str | None = None,
     created_by: str | None = None,
     search: str | None = None,
-    sort: Annotated[str, Query(pattern="^(latest|expiring_soon)$")] = "latest",
+    sort: Annotated[ChallengeSort, Query()] = ChallengeSort.latest,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ChallengeListResponse:
