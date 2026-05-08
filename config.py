@@ -28,7 +28,7 @@ class Settings(BaseModel):
             origin.strip()
             for origin in os.getenv(
                 "CORS_ORIGINS",
-                "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:8000",
+                "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:8000,https://rekto.fun,https://www.rekto.fun/",
             ).split(",")
             if origin.strip()
         ]
