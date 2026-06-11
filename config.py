@@ -49,7 +49,9 @@ class Settings(BaseModel):
     smtp_port: int = Field(default_factory=lambda: int(os.getenv("SMTP_PORT", "587")))
     smtp_user: str = Field(default_factory=lambda: os.getenv("SMTP_USER", "").strip())
     smtp_password: str = Field(default_factory=lambda: os.getenv("SMTP_PASSWORD", "").strip())
-    email_from: str = Field(default_factory=lambda: os.getenv("EMAIL_FROM", "").strip())
+    email_from: str = Field(
+        default_factory=lambda: os.getenv("EMAIL_FROM", "RektoFun <verify@rekto.fun>").strip()
+    )
 
 
 @lru_cache
