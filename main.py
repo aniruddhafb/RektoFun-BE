@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from services.database import db_service, get_db_client
+from routes import users, challenges, positions
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -72,8 +73,17 @@ async def health_check():
     }
 
 
-# Include routers (to be added as needed)
-# app.include_router(challenges.router, prefix="/api/v1/challenges", tags=["challenges"])
+
+# Include routers
+app.include_router(users.router, prefix="/api", tags=["users"])
+
+# Include challenge routes
+app.include_router(challenges.router, prefix="/api", tags=["challenges"])
+
+# Include position routes
+app.include_router(positions.router, prefix="/api", tags=["positions"])
+
+# Future routers (to be added as needed)
 # app.include_router(transactions.router, prefix="/api/v1/transactions", tags=["transactions"])
 
 

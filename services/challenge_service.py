@@ -1,0 +1,274 @@
+"""
+Challenge service for CRUD operations on the challenge table.
+"""
+
+import logging
+from typing import Optional
+
+from supabase import Client
+
+from models.challenge import ChallengeCreate, ChallengeUpdate, ChallengeResponse, ChallengeStatus
+
+logger = logging.getLogger(__name__)
+
+
+class ChallengeService:
+    """Service for managing challenge operations with Supabase"""
+
+    def __init__(self, db_client: Client):
+        self.db = db_client
+        self.table = "challenge"
+
+    async def create_challenge(self, challenge_data: ChallengeCreate) -> ChallengeResponse:
+        """
+        Create a new challenge in the database.
+        
+        Args:
+            challenge_data: Challenge data to create
+            
+        Returns:
+            ChallengeResponse: Created challenge data
+            
+        Raises:
+            Exception: If database operation fails
+        """
+        try:
+            data = challenge_data.model_dump(exclude_unset=True)
+            result = self.db.table(self.table).insert(data).execute()
+            
+            if not result.data:
+                raise Exception("Failed to create challenge - no data returned")
+            
+            created_challenge = result.data[0]
+            logger.info(f"Created challenge with ID: {created_challenge['id']}")
+            return ChallengeResponse(**created_challenge)
+            
+        except Exception as e:
+            logger.error(f"Error creating challenge: {e}")
+            raise
+
+    async def get_challenge(self, challenge_id: int) -> Optional[ChallengeResponse]:
+        """
+        Get a challenge by ID.
+        
+        Args:
+            challenge_id: The challenge ID to look up
+            
+        Returns:
+            ChallengeResponse if found, None otherwise
+            
+        Raises:
+            Exception: If database operation fails
+        """
+        try:
+            result = (
+                self.db.table(self.table)
+                .select("*")
+                .eq("id", challenge_id)
+                .execute()
+            )
+            
+            if not result.data:
+                return None
+            
+            return ChallengeResponse(**result.data[0])
+            
+        except Exception as e:
+            logger.error(f"Error fetching challenge {challenge_id}: {e}")
+            raise
+
+    async def get_challenges_by_creator(self, creator_id: int) -> list[ChallengeResponse]:
+        """
+        Get all challenges created by a specific user.
+        
+        Args:
+            creator_id: The user ID of the creator
+            
+        Returns:
+            List of ChallengeResponse objects
+            
+        Raises:
+            Exception: If database operation fails
+        """
+        try:
+            result = (
+                self.db.table(self.table)
+                .select("*")
+                .eq("creator", creator_id)
+                .execute()
+            )
+            
+            return [ChallengeResponse(**challenge) for challenge in result.data]
+            
+        except Exception as e:
+            logger.error(f"Error fetching challenges by creator {creator_id}: {e}")
+            raise
+
+    async def get_challenges_by_status(self, status: ChallengeStatus) -> list[ChallengeResponse]:
+        """
+        Get all challenges with a specific status.
+        
+        Args:
+            status: The challenge status to filter by
+            
+        Returns:
+            List of ChallengeResponse objects
+            
+        Raises:
+            Exception: If database operation fails
+        """
+        try:
+            result = (
+                self.db.table(self.table)
+                .select("*")
+                .eq("status", status.value)
+                .execute()
+            )
+            
+            return [ChallengeResponse(**challenge) for challenge in result.data]
+            
+        except Exception as e:
+            logger.error(f"Error fetching challenges by status {status}: {e}")
+            raise
+
+    async def list_challenges(
+        self,
+        limit: int = 100,
+        offset: int = 0
+    ) -> list[ChallengeResponse]:
+        """
+        List challenges with pagination.
+        
+        Args:
+            limit: Maximum number of challenges to return
+            offset: Number of challenges to skip
+            
+        Returns:
+            List of ChallengeResponse objects
+            
+        Raises:
+            Exception: If database operation fails
+        """
+        try:
+            result = (
+                self.db.table(self.table)
+                .select("*")
+                .range(offset, offset + limit - 1)
+                .execute()
+            )
+            
+            return [ChallengeResponse(**challenge) for challenge in result.data]
+            
+        except Exception as e:
+            logger.error(f"Error listing challenges: {e}")
+            raise
+
+    async def update_challenge(
+        self,
+        challenge_id: int,
+        challenge_data: ChallengeUpdate
+    ) -> Optional[ChallengeResponse]:
+        """
+        Update a challenge by ID.
+        
+        Args:
+            challenge_id: The challenge ID to update
+            challenge_data: Updated challenge data
+            
+        Returns:
+            ChallengeResponse if updated, None if challenge not found
+            
+        Raises:
+            Exception: If database operation fails
+        """
+        try:
+            data = challenge_data.model_dump(exclude_unset=True, exclude_none=True)
+            
+            if not data:
+                logger.warning("No data provided for challenge update")
+                return await self.get_challenge(challenge_id)
+            
+            result = (
+                self.db.table(self.table)
+                .update(data)
+                .eq("id", challenge_id)
+                .execute()
+            )
+            
+            if not result.data:
+                return None
+            
+            updated_challenge = result.data[0]
+            logger.info(f"Updated challenge with ID: {challenge_id}")
+            return ChallengeResponse(**updated_challenge)
+            
+        except Exception as e:
+            logger.error(f"Error updating challenge {challenge_id}: {e}")
+            raise
+
+    async def delete_challenge(self, challenge_id: int) -> bool:
+        """
+        Delete a challenge by ID.
+        
+        Args:
+            challenge_id: The challenge ID to delete
+            
+        Returns:
+            True if deleted, False if challenge not found
+            
+        Raises:
+            Exception: If database operation fails
+        """
+        try:
+            result = (
+                self.db.table(self.table)
+                .delete()
+                .eq("id", challenge_id)
+                .execute()
+            )
+            
+            if result.data:
+                logger.info(f"Deleted challenge with ID: {challenge_id}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error deleting challenge {challenge_id}: {e}")
+            raise
+
+    async def count_challenges(self) -> int:
+        """
+        Get total count of challenges.
+        
+        Returns:
+            Total number of challenges
+            
+        Raises:
+            Exception: If database operation fails
+        """
+        try:
+            result = (
+                self.db.table(self.table)
+                .select("*", count="exact", head=True)
+                .execute()
+            )
+            
+            return result.count or 0
+            
+        except Exception as e:
+            logger.error(f"Error counting challenges: {e}")
+            raise
+
+
+def get_challenge_service(db_client: Client) -> ChallengeService:
+    """
+    Factory function to create a ChallengeService instance.
+    
+    Args:
+        db_client: The Supabase client
+        
+    Returns:
+        ChallengeService instance
+    """
+    return ChallengeService(db_client)
