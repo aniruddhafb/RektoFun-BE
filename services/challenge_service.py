@@ -33,7 +33,7 @@ class ChallengeService:
             Exception: If database operation fails
         """
         try:
-            data = challenge_data.model_dump(exclude_unset=True)
+            data = challenge_data.model_dump(exclude_unset=True, mode="json")
             result = self.db.table(self.table).insert(data).execute()
             
             if not result.data:
@@ -182,7 +182,7 @@ class ChallengeService:
             Exception: If database operation fails
         """
         try:
-            data = challenge_data.model_dump(exclude_unset=True, exclude_none=True)
+            data = challenge_data.model_dump(exclude_unset=True, exclude_none=True, mode="json")
             
             if not data:
                 logger.warning("No data provided for challenge update")
@@ -258,6 +258,99 @@ class ChallengeService:
             
         except Exception as e:
             logger.error(f"Error counting challenges: {e}")
+            raise
+
+    async def update_challenge_status(
+        self,
+        challenge_id: int,
+        new_status: ChallengeStatus,
+        end_price: float = None
+    ) -> Optional[ChallengeResponse]:
+        """
+        Update the status of a challenge.
+        
+        Args:
+            challenge_id: The ID of the challenge to update
+            new_status: The new status value
+            end_price: Optional end price when completing a challenge
+            
+        Returns:
+            ChallengeResponse if updated, None if challenge not found
+            
+        Raises:
+            ValueError: If status transition is invalid
+            Exception: If database operation fails
+        """
+        try:
+            # Get current challenge
+            challenge = await self.get_challenge(challenge_id)
+            if not challenge:
+                return None
+            
+            # Validate status transition
+            valid_transitions = {
+                ChallengeStatus.OPEN: [ChallengeStatus.RESOLVED, ChallengeStatus.CANCELLED, ChallengeStatus.EXPIRED],
+                ChallengeStatus.RESOLVED: [],
+                ChallengeStatus.EXPIRED: [],
+                ChallengeStatus.CANCELLED: [ChallengeStatus.OPEN],
+            }
+            
+            current_status = ChallengeStatus(challenge.status)
+            
+            if new_status not in valid_transitions.get(current_status, []):
+                raise ValueError(
+                    f"Invalid status transition from {current_status.value} to {new_status.value}"
+                )
+            
+            # Prepare update data
+            update_data = {"status": new_status.value}
+            if new_status == ChallengeStatus.RESOLVED and end_price is not None:
+                update_data["end_price"] = end_price
+            
+            # Update in database
+            result = (
+                self.db.table(self.table)
+                .update(update_data)
+                .eq("id", challenge_id)
+                .execute()
+            )
+            
+            if not result.data:
+                return None
+            
+            updated_challenge = result.data[0]
+            logger.info(f"Updated challenge {challenge_id} status to {new_status.value}")
+            return ChallengeResponse(**updated_challenge)
+            
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(f"Error updating challenge status for {challenge_id}: {e}")
+            raise
+
+    async def get_active_challenges_raw(self) -> list[dict]:
+        """
+        Get all active challenges as raw dictionaries.
+        Used by the challenge monitor service.
+        
+        Returns:
+            List of challenge dictionaries
+            
+        Raises:
+            Exception: If database operation fails
+        """
+        try:
+            result = (
+                self.db.table(self.table)
+                .select("*")
+                .eq("status", ChallengeStatus.OPEN.value)
+                .execute()
+            )
+            
+            return result.data or []
+            
+        except Exception as e:
+            logger.error(f"Error fetching active challenges: {e}")
             raise
 
 

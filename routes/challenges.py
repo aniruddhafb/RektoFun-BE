@@ -13,10 +13,18 @@ from models.challenge import (
     ChallengeUpdate,
     ChallengeResponse,
     ChallengeListResponse,
-    ChallengeStatus
+    ChallengeStatus,
+    Direction
 )
+from models.position import PositionCreate, Side
 from services.database import get_db_client
 from services.challenge_service import get_challenge_service, ChallengeService
+from services.position_service import get_position_service
+from services.challenge_monitor_service import (
+    monitor_new_challenge,
+    stop_monitoring_challenge,
+    get_challenge_monitor
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +46,8 @@ async def create_challenge(
     Create a new challenge.
     
     - **statement**: The challenge statement/question (optional)
+    - **ticker**: The ticker symbol for the challenge (optional)
+    - **target**: Target value for price-based challenges (optional)
     - **initial_bet**: Initial bet amount (optional)
     - **pool_size**: Total pool size (optional)
     - **resolution_source**: Source for resolving the challenge (optional)
@@ -48,10 +58,33 @@ async def create_challenge(
     - **status**: Challenge status (default: OPEN)
     - **mode**: Challenge mode - PVP or Team (optional)
     - **result**: Result side if resolved (optional)
+    - **direction**: Direction of the challenge - UP or DOWN (optional)
+    - **expiry**: Expiry date for the challenge in YYYY-MM-DD format (optional)
+    - **resolution_date**: Date when the challenge will be resolved in YYYY-MM-DD format (optional)
     """
     service = get_challenge_service(db)
+    position_service = get_position_service(db)
     try:
-        return await service.create_challenge(challenge_data)
+        # Create the challenge first
+        challenge = await service.create_challenge(challenge_data)
+        
+        # Create a position for the challenge creator
+        position_data = PositionCreate(
+            challenge_id=challenge.id,
+            bet=challenge.initial_bet,
+            side=Side.TEAM_A,
+            creator=challenge.creator
+        )
+        await position_service.create_position(position_data)
+        
+        # Start monitoring the challenge for price targets
+        # Only monitor if it has a ticker and target price
+        if challenge.ticker and challenge.target:
+            challenge_dict = challenge.model_dump()
+            await monitor_new_challenge(challenge_dict)
+            logger.info(f"Started monitoring challenge {challenge.id} for price target")
+        
+        return challenge
     except Exception as e:
         logger.error(f"Failed to create challenge: {e}")
         raise HTTPException(
@@ -194,6 +227,8 @@ async def update_challenge(
     
     - **challenge_id**: The unique ID of the challenge to update
     - **statement**: New challenge statement (optional)
+    - **ticker**: New ticker symbol for the challenge (optional)
+    - **target**: New target value for price-based challenges (optional)
     - **initial_bet**: New initial bet amount (optional)
     - **pool_size**: New pool size (optional)
     - **resolution_source**: New resolution source (optional)
@@ -204,6 +239,9 @@ async def update_challenge(
     - **status**: New status (optional)
     - **mode**: New mode (optional)
     - **result**: New result (optional)
+    - **direction**: New direction - UP or DOWN (optional)
+    - **expiry**: New expiry date in YYYY-MM-DD format (optional)
+    - **resolution_date**: New resolution date in YYYY-MM-DD format (optional)
     """
     service = get_challenge_service(db)
     try:
@@ -241,6 +279,9 @@ async def delete_challenge(
     """
     service = get_challenge_service(db)
     try:
+        # Stop monitoring before deleting
+        await stop_monitoring_challenge(challenge_id)
+        
         deleted = await service.delete_challenge(challenge_id)
         if not deleted:
             raise HTTPException(
@@ -254,4 +295,50 @@ async def delete_challenge(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete challenge"
+        )
+
+
+@router.get(
+    "/monitor/active-streams",
+    summary="Get active subscribed streams",
+    description="Retrieve all currently active subscribed streams (trading pairs) being monitored via WebSocket"
+)
+async def get_active_subscribed_streams():
+    """
+    Get all active subscribed streams being monitored by the Challenge Monitor Service.
+    
+    Returns a list of active challenges with their trading pairs and monitoring details.
+    """
+    try:
+        monitor = get_challenge_monitor()
+        active_challenges = monitor.get_active_challenges()
+        
+        # Extract unique subscribed streams (trading pairs)
+        subscribed_streams = {}
+        for challenge in active_challenges:
+            symbol = challenge.get("trading_pair")
+            if symbol:
+                if symbol not in subscribed_streams:
+                    subscribed_streams[symbol] = {
+                        "symbol": symbol,
+                        "ticker": challenge.get("ticker"),
+                        "challenges": []
+                    }
+                subscribed_streams[symbol]["challenges"].append({
+                    "challenge_id": challenge.get("challenge_id"),
+                    "target": challenge.get("target"),
+                    "direction": challenge.get("direction"),
+                    "created_at": challenge.get("created_at")
+                })
+        
+        return {
+            "total_streams": len(subscribed_streams),
+            "total_monitored_challenges": len(active_challenges),
+            "streams": list(subscribed_streams.values())
+        }
+    except Exception as e:
+        logger.error(f"Failed to get active subscribed streams: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve active subscribed streams"
         )

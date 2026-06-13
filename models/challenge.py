@@ -2,7 +2,7 @@
 Challenge models for request/response validation and data transfer.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Optional, Any
 
@@ -20,7 +20,7 @@ class ChallengeStatus(str, Enum):
 class ChallengeMode(str, Enum):
     """Challenge mode enum matching Supabase schema"""
     PVP = "PVP"
-    TEAM = "Team"
+    TEAM = "TEAM"
 
 
 class ResolutionMethod(str, Enum):
@@ -35,9 +35,18 @@ class Side(str, Enum):
     TEAM_B = "TEAM_B"
 
 
+class Direction(str, Enum):
+    """Direction enum matching Supabase schema"""
+    UP = "UP"
+    DOWN = "DOWN"
+
+
 class ChallengeBase(BaseModel):
     """Base challenge model with common attributes"""
     statement: Optional[str] = Field(None, description="The challenge statement/question")
+    ticker: Optional[str] = Field(None, description="The ticker symbol for the challenge")
+    trading_pair: Optional[str] = Field(None, description="The trading pair symbol (e.g., BTCUSDT)")
+    target: Optional[int] = Field(None, description="Target value for price-based challenges")
     initial_bet: Optional[int] = Field(None, description="Initial bet amount")
     pool_size: Optional[int] = Field(None, description="Total pool size")
     resolution_source: Optional[str] = Field(None, description="Source for resolving the challenge")
@@ -48,6 +57,9 @@ class ChallengeBase(BaseModel):
     status: Optional[ChallengeStatus] = Field(ChallengeStatus.OPEN, description="Challenge status")
     mode: Optional[ChallengeMode] = Field(None, description="Challenge mode (PVP or Team)")
     result: Optional[Side] = Field(None, description="Result side if resolved")
+    direction: Optional[Direction] = Field(None, description="Direction of the challenge (UP or DOWN)")
+    expiry: Optional[date] = Field(None, description="Expiry date for the challenge")
+    resolution_date: Optional[date] = Field(None, description="Date when the challenge will be resolved")
 
 
 class ChallengeCreate(ChallengeBase):
@@ -58,6 +70,9 @@ class ChallengeCreate(ChallengeBase):
 class ChallengeUpdate(BaseModel):
     """Model for updating an existing challenge - all fields optional"""
     statement: Optional[str] = Field(None, description="The challenge statement/question")
+    ticker: Optional[str] = Field(None, description="The ticker symbol for the challenge")
+    trading_pair: Optional[str] = Field(None, description="The trading pair symbol (e.g., BTCUSDT)")
+    target: Optional[int] = Field(None, description="Target value for price-based challenges")
     initial_bet: Optional[int] = Field(None, description="Initial bet amount")
     pool_size: Optional[int] = Field(None, description="Total pool size")
     resolution_source: Optional[str] = Field(None, description="Source for resolving the challenge")
@@ -68,6 +83,9 @@ class ChallengeUpdate(BaseModel):
     status: Optional[ChallengeStatus] = Field(None, description="Challenge status")
     mode: Optional[ChallengeMode] = Field(None, description="Challenge mode (PVP or Team)")
     result: Optional[Side] = Field(None, description="Result side if resolved")
+    direction: Optional[Direction] = Field(None, description="Direction of the challenge (UP or DOWN)")
+    expiry: Optional[date] = Field(None, description="Expiry date for the challenge")
+    resolution_date: Optional[date] = Field(None, description="Date when the challenge will be resolved")
 
 
 class ChallengeResponse(ChallengeBase):

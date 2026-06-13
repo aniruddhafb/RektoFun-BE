@@ -13,6 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from services.database import db_service, get_db_client
+from services.challenge_monitor_service import (
+    start_challenge_monitor,
+    stop_challenge_monitor,
+)
 from routes import users, challenges, positions
 
 # Configure logging
@@ -25,7 +29,8 @@ async def lifespan(app: FastAPI):
     """
     Manage application lifespan events.
     
-    Initializes the Supabase database connection on startup
+    Initializes the Supabase database connection on startup,
+    starts the challenge monitor for real-time price tracking,
     and cleans up resources on shutdown.
     """
     # Startup: Initialize database connection
@@ -37,10 +42,28 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize Supabase connection: {e}")
         raise
     
+    # Startup: Initialize challenge monitor
+    logger.info("Starting challenge monitor service...")
+    try:
+        await start_challenge_monitor()
+        logger.info("Challenge monitor service started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start challenge monitor service: {e}")
+        # Don't raise - we can still run without the monitor
+    
     yield
     
     # Shutdown: Cleanup resources
     logger.info("Shutting down and cleaning up resources...")
+    
+    # Stop challenge monitor
+    try:
+        await stop_challenge_monitor()
+        logger.info("Challenge monitor service stopped")
+    except Exception as e:
+        logger.error(f"Error stopping challenge monitor: {e}")
+    
+    # Close database connection
     await db_service.close()
     logger.info("Cleanup completed")
 
