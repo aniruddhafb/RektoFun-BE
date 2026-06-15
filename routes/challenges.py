@@ -56,7 +56,7 @@ async def create_challenge(
     - **resolution_method**: Method for resolving the challenge (optional)
     - **participants**: Number of participants (optional)
     - **status**: Challenge status (default: OPEN)
-    - **mode**: Challenge mode - PVP or Team (optional)
+    - **mode**: Challenge mode - PVP or TEAM (optional)
     - **result**: Result side if resolved (optional)
     - **direction**: Direction of the challenge - UP or DOWN (optional)
     - **expiry**: Expiry date for the challenge in YYYY-MM-DD format (optional)
@@ -197,7 +197,7 @@ async def get_challenges_by_status(
     """
     Get all challenges with a specific status.
     
-    - **status**: The status to filter by (OPEN, EXPIRED, RESOLVED, CANCELLED)
+    - **status**: The status to filter by (OPEN, PENDING_RESOLUTION, EXPIRED, RESOLVED, CANCELLED)
     """
     service = get_challenge_service(db)
     try:

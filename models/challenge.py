@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 class ChallengeStatus(str, Enum):
     """Challenge status enum matching Supabase schema"""
     OPEN = "OPEN"
+    PENDING_RESOLUTION = "PENDING_RESOLUTION"
     EXPIRED = "EXPIRED"
     RESOLVED = "RESOLVED"
     CANCELLED = "CANCELLED"
@@ -55,10 +56,10 @@ class ChallengeBase(BaseModel):
     resolution_method: Optional[ResolutionMethod] = Field(None, description="Method for resolving the challenge")
     participants: Optional[int] = Field(None, description="Number of participants")
     status: Optional[ChallengeStatus] = Field(ChallengeStatus.OPEN, description="Challenge status")
-    mode: Optional[ChallengeMode] = Field(None, description="Challenge mode (PVP or Team)")
+    mode: Optional[ChallengeMode] = Field(None, description="Challenge mode (PVP or TEAM)")
     result: Optional[Side] = Field(None, description="Result side if resolved")
     direction: Optional[Direction] = Field(None, description="Direction of the challenge (UP or DOWN)")
-    expiry: Optional[date] = Field(None, description="Expiry date for the challenge")
+    expiry: Optional[date] = Field(None, description="This is the date when new bets will no longer be accepted for the challenge")
     resolution_date: Optional[date] = Field(None, description="Date when the challenge will be resolved")
 
 
@@ -81,7 +82,7 @@ class ChallengeUpdate(BaseModel):
     resolution_method: Optional[ResolutionMethod] = Field(None, description="Method for resolving the challenge")
     participants: Optional[int] = Field(None, description="Number of participants")
     status: Optional[ChallengeStatus] = Field(None, description="Challenge status")
-    mode: Optional[ChallengeMode] = Field(None, description="Challenge mode (PVP or Team)")
+    mode: Optional[ChallengeMode] = Field(None, description="Challenge mode (PVP or TEAM)")
     result: Optional[Side] = Field(None, description="Result side if resolved")
     direction: Optional[Direction] = Field(None, description="Direction of the challenge (UP or DOWN)")
     expiry: Optional[date] = Field(None, description="Expiry date for the challenge")

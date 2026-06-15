@@ -289,7 +289,8 @@ class ChallengeService:
             
             # Validate status transition
             valid_transitions = {
-                ChallengeStatus.OPEN: [ChallengeStatus.RESOLVED, ChallengeStatus.CANCELLED, ChallengeStatus.EXPIRED],
+                ChallengeStatus.OPEN: [ChallengeStatus.PENDING_RESOLUTION, ChallengeStatus.RESOLVED, ChallengeStatus.CANCELLED, ChallengeStatus.EXPIRED],
+                ChallengeStatus.PENDING_RESOLUTION: [ChallengeStatus.RESOLVED, ChallengeStatus.CANCELLED],
                 ChallengeStatus.RESOLVED: [],
                 ChallengeStatus.EXPIRED: [],
                 ChallengeStatus.CANCELLED: [ChallengeStatus.OPEN],
