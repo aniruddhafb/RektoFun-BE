@@ -61,6 +61,7 @@ class ChallengeBase(BaseModel):
     direction: Optional[Direction] = Field(None, description="Direction of the challenge (UP or DOWN)")
     expiry: Optional[date] = Field(None, description="This is the date when new bets will no longer be accepted for the challenge")
     resolution_date: Optional[date] = Field(None, description="Date when the challenge will be resolved")
+    final_price: Optional[int] = Field(None, description="Final price of the asset when challenge was resolved or expired")
 
 
 class ChallengeCreate(ChallengeBase):
@@ -87,6 +88,7 @@ class ChallengeUpdate(BaseModel):
     direction: Optional[Direction] = Field(None, description="Direction of the challenge (UP or DOWN)")
     expiry: Optional[date] = Field(None, description="Expiry date for the challenge")
     resolution_date: Optional[date] = Field(None, description="Date when the challenge will be resolved")
+    final_price: Optional[int] = Field(None, description="Final price of the asset when challenge was resolved or expired")
 
 
 class ChallengeResponse(ChallengeBase):

@@ -200,6 +200,7 @@ class BinanceWebSocketClient:
     async def subscribe(self, symbol: str, callback: Callable[[PriceUpdate], None]):
         """
         Subscribe to price updates for a symbol.
+        Only one callback per symbol is supported (last one wins).
         
         Args:
             symbol: Trading pair symbol (e.g., "BTCUSDT")

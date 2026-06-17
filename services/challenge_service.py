@@ -264,7 +264,8 @@ class ChallengeService:
         self,
         challenge_id: int,
         new_status: ChallengeStatus,
-        end_price: float = None
+        end_price: float = None,
+        final_price: float = None
     ) -> Optional[ChallengeResponse]:
         """
         Update the status of a challenge.
@@ -272,7 +273,8 @@ class ChallengeService:
         Args:
             challenge_id: The ID of the challenge to update
             new_status: The new status value
-            end_price: Optional end price when completing a challenge
+            end_price: Optional end price when completing a challenge (deprecated, use final_price)
+            final_price: Optional final price when completing a challenge
             
         Returns:
             ChallengeResponse if updated, None if challenge not found
@@ -305,8 +307,9 @@ class ChallengeService:
             
             # Prepare update data
             update_data = {"status": new_status.value}
-            if new_status == ChallengeStatus.RESOLVED and end_price is not None:
-                update_data["end_price"] = end_price
+            price_to_use = final_price if final_price is not None else end_price
+            if new_status == ChallengeStatus.RESOLVED and price_to_use is not None:
+                update_data["final_price"] = price_to_use
             
             # Update in database
             result = (
@@ -327,6 +330,33 @@ class ChallengeService:
             raise
         except Exception as e:
             logger.error(f"Error updating challenge status for {challenge_id}: {e}")
+            raise
+
+    async def get_expired_open_challenges(self) -> list[dict]:
+        """
+        Get all OPEN challenges that have passed their expiry date.
+        These challenges should transition to PENDING_RESOLUTION.
+        
+        Returns:
+            List of challenge dictionaries that have expired
+            
+        Raises:
+            Exception: If database operation fails
+        """
+        try:
+            from datetime import date
+            result = (
+                self.db.table(self.table)
+                .select("*")
+                .eq("status", ChallengeStatus.OPEN.value)
+                .lt("expiry", date.today().isoformat())
+                .execute()
+            )
+            
+            return result.data or []
+            
+        except Exception as e:
+            logger.error(f"Error fetching expired open challenges: {e}")
             raise
 
     async def get_active_challenges_raw(self) -> list[dict]:

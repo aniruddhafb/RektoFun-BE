@@ -3,9 +3,10 @@ Challenge API routes for CRUD operations.
 """
 
 import logging
+import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Header
 from supabase import Client
 
 from models.challenge import (
@@ -29,6 +30,25 @@ from services.challenge_monitor_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/challenges", tags=["challenges"])
+
+
+async def verify_cron_api_key(x_api_key: str = Header(..., description="API key for cron job authentication")):
+    """
+    Dependency to verify the cron job API key.
+    """
+    expected_key = os.getenv("CRON_API_KEY")
+    if not expected_key:
+        logger.error("CRON_API_KEY environment variable not set")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server configuration error"
+        )
+    if x_api_key != expected_key:
+        logger.warning(f"Invalid API key provided for cron endpoint")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key"
+        )
 
 
 @router.post(
@@ -341,4 +361,75 @@ async def get_active_subscribed_streams():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve active subscribed streams"
+        )
+
+
+@router.post(
+    "/resolve-due",
+    summary="Resolve challenges by date",
+    description="Resolve all OPEN challenges where resolution_date has been reached. Should be called by pg_cron daily."
+)
+async def resolve_challenges_due():
+    """
+    Resolve all OPEN challenges where resolution_date has been reached.
+    
+    This endpoint should be called daily (e.g., via pg_cron) to resolve challenges
+    that have reached their resolution date. It fetches current prices and updates
+    challenge statuses to RESOLVED.
+    
+    Returns the number of challenges processed.
+    """
+    try:
+        monitor = get_challenge_monitor()
+        await monitor.resolve_challenges_by_date()
+        
+        # Get the count of challenges that were ready for resolution
+        # by checking active challenges before resolution
+        active_challenges = monitor.get_active_challenges()
+        
+        return {
+            "status": "success",
+            "message": "Challenges due for resolution have been processed",
+            "remaining_active_challenges": len(active_challenges)
+        }
+    except Exception as e:
+        logger.error(f"Failed to resolve challenges by date: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to resolve challenges"
+        )
+
+
+@router.post(
+    "/cron/resolve-due",
+    summary="Resolve challenges by date (authenticated)",
+    description="Authenticated endpoint to resolve all OPEN challenges where resolution_date has been reached. Called by pg_cron daily.",
+    dependencies=[Depends(verify_cron_api_key)]
+)
+async def resolve_challenges_due_cron():
+    """
+    Authenticated endpoint to resolve all OPEN challenges where resolution_date has been reached.
+    
+    This endpoint requires a valid CRON_API_KEY header and should be called daily
+    by pg_cron to resolve challenges that have reached their resolution date.
+    
+    Returns the number of challenges processed.
+    """
+    try:
+        monitor = get_challenge_monitor()
+        await monitor.resolve_challenges_by_date()
+        
+        # Get the count of challenges that were ready for resolution
+        active_challenges = monitor.get_active_challenges()
+        
+        return {
+            "status": "success",
+            "message": "Challenges due for resolution have been processed",
+            "remaining_active_challenges": len(active_challenges)
+        }
+    except Exception as e:
+        logger.error(f"Failed to resolve challenges by date: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to resolve challenges"
         )
