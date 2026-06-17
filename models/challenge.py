@@ -1,163 +1,106 @@
-"""Models for challenges."""
+"""
+Challenge models for request/response validation and data transfer.
+"""
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
-from uuid import UUID
+from typing import Optional, Any
 
 from pydantic import BaseModel, Field
 
-from models.challenge_side import SideKey
-
 
 class ChallengeStatus(str, Enum):
-    open = "open"
-    locked = "locked"
-    resolved = "resolved"
-    cancelled = "cancelled"
+    """Challenge status enum matching Supabase schema"""
+    OPEN = "OPEN"
+    PENDING_RESOLUTION = "PENDING_RESOLUTION"
+    EXPIRED = "EXPIRED"
+    RESOLVED = "RESOLVED"
+    CANCELLED = "CANCELLED"
 
 
-class EventType(str, Enum):
-    binary = "binary"
-    multi_outcome = "multi_outcome"
-    numeric_range = "numeric_range"
+class ChallengeMode(str, Enum):
+    """Challenge mode enum matching Supabase schema"""
+    PVP = "PVP"
+    TEAM = "TEAM"
 
 
-class ResolutionStatus(str, Enum):
-    pending = "pending"
-    fetching = "fetching"
-    resolved = "resolved"
-    failed = "failed"
-    disputed = "disputed"
+class ResolutionMethod(str, Enum):
+    """Resolution method enum matching Supabase schema"""
+    PRICE_FEED = "PRICE_FEED"
+    COMMUNITY = "COMMUNITY"
 
 
-class ResolutionMode(str, Enum):
-    at_time = "at_time"
-    anytime_before = "anytime_before"
-    event_based = "event_based"
+class Side(str, Enum):
+    """Side/result enum matching Supabase schema"""
+    TEAM_A = "TEAM_A"
+    TEAM_B = "TEAM_B"
 
 
-class Mode(str, Enum):
-    pvp = "pvp"
-    pool = "pool"
+class Direction(str, Enum):
+    """Direction enum matching Supabase schema"""
+    UP = "UP"
+    DOWN = "DOWN"
 
 
-class ChallengeCreate(BaseModel):
-    title: str = Field(min_length=1)
-    description: str | None = None
-    category: str = Field(description="Reference to markets name")
-    asset_name: str | None = None
-    event_type: EventType
-    ticker: str | None = None
-    target_price: int | None = None
-    created_by: str | None = None
-    mode: Mode = Field(default=Mode.pool)
-    initial_bet: int = Field(ge=0)
-    min_accept_bet: int | None = None
-    max_accept_bet: int | None = None
-    min_bet: int = Field(default=1, ge=1)
-    bet_unit: int = Field(default=1, ge=1)
-    expire_time: datetime
-    resolve_time: datetime
-    resolution_source: str | None = None
-    resolution_config: dict = Field(default_factory=dict)
-    result: dict | None = None
-    metadata: dict | None = None
+class ChallengeBase(BaseModel):
+    """Base challenge model with common attributes"""
+    statement: Optional[str] = Field(None, description="The challenge statement/question")
+    ticker: Optional[str] = Field(None, description="The ticker symbol for the challenge")
+    trading_pair: Optional[str] = Field(None, description="The trading pair symbol (e.g., BTCUSDT)")
+    target: Optional[int] = Field(None, description="Target value for price-based challenges")
+    initial_bet: Optional[int] = Field(None, description="Initial bet amount")
+    pool_size: Optional[int] = Field(None, description="Total pool size")
+    resolution_source: Optional[str] = Field(None, description="Source for resolving the challenge")
+    metadata: Optional[dict[str, Any]] = Field(None, description="Additional metadata as JSON")
+    creator: Optional[int] = Field(None, description="ID of the user who created the challenge")
+    resolution_method: Optional[ResolutionMethod] = Field(None, description="Method for resolving the challenge")
+    participants: Optional[int] = Field(None, description="Number of participants")
+    status: Optional[ChallengeStatus] = Field(ChallengeStatus.OPEN, description="Challenge status")
+    mode: Optional[ChallengeMode] = Field(None, description="Challenge mode (PVP or TEAM)")
+    result: Optional[Side] = Field(None, description="Result side if resolved")
+    direction: Optional[Direction] = Field(None, description="Direction of the challenge (UP or DOWN)")
+    expiry: Optional[date] = Field(None, description="This is the date when new bets will no longer be accepted for the challenge")
+    resolution_date: Optional[date] = Field(None, description="Date when the challenge will be resolved")
+    final_price: Optional[int] = Field(None, description="Final price of the asset when challenge was resolved or expired")
+
+
+class ChallengeCreate(ChallengeBase):
+    """Model for creating a new challenge"""
+    pass
 
 
 class ChallengeUpdate(BaseModel):
-    title: str | None = None
-    description: str | None = None
-    category: str | None = None
-    asset_name: str | None = None
-    event_type: EventType | None = None
-    ticker: str | None = None
-    target_price: int | None = None
-    mode: Mode | None = None
-    initial_bet: int | None = None
-    min_accept_bet: int | None = None
-    max_accept_bet: int | None = None
-    min_bet: int | None = None
-    bet_unit: int | None = None
-    total_challengers: int | None = None
-    total_opponents: int | None = None
-    status: ChallengeStatus | None = None
-    resolution_status: ResolutionStatus | None = None
-    resolution_mode: ResolutionMode | None = None
-    resolution_source: str | None = None
-    resolution_config: dict | None = None
-    expire_time: datetime | None = None
-    resolve_time: datetime | None = None
-    resolved_at: datetime | None = None
-    result: dict | None = None
-    metadata: dict | None = None
+    """Model for updating an existing challenge - all fields optional"""
+    statement: Optional[str] = Field(None, description="The challenge statement/question")
+    ticker: Optional[str] = Field(None, description="The ticker symbol for the challenge")
+    trading_pair: Optional[str] = Field(None, description="The trading pair symbol (e.g., BTCUSDT)")
+    target: Optional[int] = Field(None, description="Target value for price-based challenges")
+    initial_bet: Optional[int] = Field(None, description="Initial bet amount")
+    pool_size: Optional[int] = Field(None, description="Total pool size")
+    resolution_source: Optional[str] = Field(None, description="Source for resolving the challenge")
+    metadata: Optional[dict[str, Any]] = Field(None, description="Additional metadata as JSON")
+    creator: Optional[int] = Field(None, description="ID of the user who created the challenge")
+    resolution_method: Optional[ResolutionMethod] = Field(None, description="Method for resolving the challenge")
+    participants: Optional[int] = Field(None, description="Number of participants")
+    status: Optional[ChallengeStatus] = Field(None, description="Challenge status")
+    mode: Optional[ChallengeMode] = Field(None, description="Challenge mode (PVP or TEAM)")
+    result: Optional[Side] = Field(None, description="Result side if resolved")
+    direction: Optional[Direction] = Field(None, description="Direction of the challenge (UP or DOWN)")
+    expiry: Optional[date] = Field(None, description="Expiry date for the challenge")
+    resolution_date: Optional[date] = Field(None, description="Date when the challenge will be resolved")
+    final_price: Optional[int] = Field(None, description="Final price of the asset when challenge was resolved or expired")
 
 
-class ChallengeResponse(BaseModel):
-    id: str
-    title: str
-    description: str | None
-    category: str
-    asset_name: str | None
-    event_type: str
-    ticker: str | None
-    target_price: int | None
-    created_by: str | None
-    mode: str
-    initial_bet: int
-    min_accept_bet: int | None
-    max_accept_bet: int | None
-    min_bet: int
-    bet_unit: int
-    total_pool: int
-    total_challengers: int
-    total_opponents: int
-    status: str
-    resolution_status: str
-    resolution_mode: str
-    resolution_source: str | None
-    resolution_config: dict
-    expire_time: datetime
-    resolve_time: datetime | None
-    resolved_at: datetime | None
-    result: dict | None
-    metadata: dict | None
-    created_at: datetime | None
-    updated_at: datetime | None
+class ChallengeResponse(ChallengeBase):
+    """Model for challenge response data"""
+    id: int = Field(..., description="Unique challenge ID")
+    created_at: datetime = Field(..., description="Challenge creation timestamp")
 
+    class Config:
+        from_attributes = True
 
-class EnrichedChallengeResponse(BaseModel):
-    id: str
-    title: str
-    asset_name: str | None
-    mode: str
-    initial_bet: int
-    target_price: int | None
-    min_accept_bet: int | None
-    max_accept_bet: int | None
-    min_bet: int
-    total_pool: int
-    status: str
-    resolution_status: str | None = None
-    resolution_source: str | None = None
-    expire_time: datetime
-    resolve_time: datetime | None
-    resolved_at: datetime | None
-    result: dict | None
-    metadata: dict | None
-    created_at: datetime | None
-    total_challengers: int
-    total_opponents: int
-    market: dict | None = Field(description="Market info: name, image, icon, parent_id, parent_name")
-    creator: dict | None = Field(description="Creator info: username, profile_image")
-    opponent_info: dict | None = Field(description="First challenge_side data with SideKey = opponent")
 
 class ChallengeListResponse(BaseModel):
-    challenges: list[EnrichedChallengeResponse]
-    count: int
-
-
-class ChallengeJoin(BaseModel):
-    challenge_id: UUID
-    user_id: str 
-    side: SideKey
-    bet_amount: int = Field(ge=1)
+    """Model for list of challenges response"""
+    challenges: list[ChallengeResponse]
+    total: int = Field(..., description="Total number of challenges")
