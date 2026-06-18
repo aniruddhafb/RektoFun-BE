@@ -1,5 +1,7 @@
-"""Routes package."""
+"""
+Routes package initialization.
+"""
 
-from routes.clans import router as clans_router
+from routes.users import router
 
-__all__ = ["clans_router"]
+__all__ = ["router"]

@@ -1,234 +1,269 @@
-"""Positions API endpoints."""
+"""
+Position API routes for CRUD operations.
+"""
 
-from typing import Annotated
-from uuid import UUID
+import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from supabase import Client
 
-from config import get_supabase
 from models.position import (
     PositionCreate,
-    PositionListResponse,
-    PositionResponse,
     PositionUpdate,
+    PositionResponse,
+    PositionListResponse,
+    Side
 )
-from utils import serialize_payload
+from services.database import get_db_client
+from services.position_service import get_position_service, PositionService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/positions", tags=["positions"])
 
 
-def coerce_position(row: dict) -> PositionResponse:
-    return PositionResponse.model_validate(row)
-
-
-@router.post("", response_model=PositionResponse, status_code=201)
-def create_position(
-    position: PositionCreate,
-    supabase: Annotated[Client, Depends(get_supabase)],
-) -> dict:
+@router.post(
+    "",
+    response_model=PositionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new position",
+    description="Create a new position with the provided data"
+)
+async def create_position(
+    position_data: PositionCreate,
+    db: Client = Depends(get_db_client)
+):
     """
     Create a new position.
 
-    Example:
-        curl -X POST http://localhost:8000/positions \\
-          -H "Content-Type: application/json" \\
-          -d '{
-            "challenge_id": "123e4567-e89b-12d3-a456-426614174000",
-            "side_id": "456e4567-e89b-12d3-a456-426614174001",
-            "user_id": "wallet_address_here",
-            "amount": 100
-          }'
+    - **challenge_id**: ID of the challenge (optional)
+    - **bet**: Bet amount (optional)
+    - **side**: Side chosen - TEAM_A or TEAM_B (optional)
+    - **creator**: ID of the user who created the position (optional)
     """
-    payload = serialize_payload(position.model_dump())
-
+    service = get_position_service(db)
     try:
-        result = (
-            supabase.table("positions")
-            .insert(payload)
-            .execute()
-        )
-    except Exception as exc:
+        return await service.create_position(position_data)
+    except Exception as e:
+        logger.error(f"Failed to create position: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to insert position: {exc}",
-        ) from exc
-
-    if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to insert position")
-
-    return {"status": "ok"}
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create position"
+        )
 
 
-@router.get("", response_model=PositionListResponse)
-def get_positions(
-    supabase: Annotated[Client, Depends(get_supabase)],
-    challenge_id: str | None = None,
-    side_id: str | None = None,
-    user_id: UUID | None = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> PositionListResponse:
+@router.get(
+    "",
+    response_model=PositionListResponse,
+    summary="List all positions",
+    description="Get a paginated list of all positions"
+)
+async def list_positions(
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of positions to return"),
+    offset: int = Query(0, ge=0, description="Number of positions to skip"),
+    db: Client = Depends(get_db_client)
+):
     """
-    Get a list of positions with optional filters.
+    List all positions with pagination.
 
-    Example:
-        curl "http://localhost:8000/positions?challenge_id=123e4567-e89b-12d3-a456-426614174000&user_id=wallet_address&limit=10&offset=0"
+    - **limit**: Maximum number of positions to return (default: 100, max: 1000)
+    - **offset**: Number of positions to skip for pagination (default: 0)
     """
-    query = supabase.table("positions").select("*")
-
-    if challenge_id:
-        query = query.eq("challenge_id", challenge_id)
-    if side_id:
-        query = query.eq("side_id", side_id)
-    if user_id:
-        query = query.eq("user_id", user_id)
-
+    service = get_position_service(db)
     try:
-        result = (
-            query.order("created_at", desc=True)
-            .range(offset, offset + limit - 1)
-            .execute()
-        )
-    except Exception as exc:
+        positions = await service.list_positions(limit=limit, offset=offset)
+        total = await service.count_positions()
+        return PositionListResponse(positions=positions, total=total)
+    except Exception as e:
+        logger.error(f"Failed to list positions: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch positions: {exc}",
-        ) from exc
-
-    rows = result.data or []
-    return PositionListResponse(
-        positions=[coerce_position(row) for row in rows],
-        count=len(rows),
-    )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve positions"
+        )
 
 
-@router.get("/{position_id}", response_model=PositionResponse)
-def get_position_by_id(
-    position_id: str,
-    supabase: Annotated[Client, Depends(get_supabase)],
-) -> PositionResponse:
+@router.get(
+    "/{position_id}",
+    response_model=PositionResponse,
+    summary="Get position by ID",
+    description="Retrieve a specific position by its ID"
+)
+async def get_position(
+    position_id: int,
+    db: Client = Depends(get_db_client)
+):
     """
     Get a position by its ID.
 
-    Example:
-        curl http://localhost:8000/positions/123e4567-e89b-12d3-a456-426614174000
+    - **position_id**: The unique ID of the position
     """
+    service = get_position_service(db)
     try:
-        result = (
-            supabase.table("positions")
-            .select("*")
-            .eq("id", position_id)
-            .limit(1)
-            .execute()
-        )
-    except Exception as exc:
+        position = await service.get_position(position_id)
+        if not position:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Position with ID {position_id} not found"
+            )
+        return position
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get position {position_id}: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch position: {exc}",
-        ) from exc
-
-    rows = result.data or []
-    if not rows:
-        raise HTTPException(status_code=404, detail="Position not found")
-
-    return coerce_position(rows[0])
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve position"
+        )
 
 
-@router.patch("/{position_id}", response_model=PositionResponse)
-def update_position(
-    position_id: str,
-    position_update: PositionUpdate,
-    supabase: Annotated[Client, Depends(get_supabase)],
-) -> PositionResponse:
+@router.get(
+    "/by-challenge/{challenge_id}",
+    response_model=list[PositionResponse],
+    summary="Get positions by challenge",
+    description="Retrieve all positions for a specific challenge"
+)
+async def get_positions_by_challenge(
+    challenge_id: int,
+    db: Client = Depends(get_db_client)
+):
     """
-    Update a position.
+    Get all positions for a specific challenge.
 
-    Example:
-        curl -X PATCH http://localhost:8000/positions/123e4567-e89b-12d3-a456-426614174000 \\
-          -H "Content-Type: application/json" \\
-          -d '{"amount": 200}'
+    - **challenge_id**: The ID of the challenge
     """
-    # First check if position exists
+    service = get_position_service(db)
     try:
-        existing = (
-            supabase.table("positions")
-            .select("*")
-            .eq("id", position_id)
-            .limit(1)
-            .execute()
-        )
-    except Exception as exc:
+        positions = await service.get_positions_by_challenge(challenge_id)
+        return positions
+    except Exception as e:
+        logger.error(f"Failed to get positions by challenge {challenge_id}: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch position: {exc}",
-        ) from exc
-
-    if not existing.data:
-        raise HTTPException(status_code=404, detail="Position not found")
-
-    # Build update payload (only non-None fields)
-    update_payload = {k: v for k, v in position_update.model_dump().items() if v is not None}
-    update_payload = serialize_payload(update_payload)
-
-    if not update_payload:
-        raise HTTPException(
-            status_code=422,
-            detail="No fields to update",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve positions"
         )
 
+
+@router.get(
+    "/by-creator/{creator_id}",
+    response_model=list[PositionResponse],
+    summary="Get positions by creator",
+    description="Retrieve all positions created by a specific user"
+)
+async def get_positions_by_creator(
+    creator_id: int,
+    db: Client = Depends(get_db_client)
+):
+    """
+    Get all positions created by a specific user.
+
+    - **creator_id**: The ID of the user who created the positions
+    """
+    service = get_position_service(db)
     try:
-        result = (
-            supabase.table("positions")
-            .update(update_payload)
-            .eq("id", position_id)
-            .execute()
-        )
-    except Exception as exc:
+        positions = await service.get_positions_by_creator(creator_id)
+        return positions
+    except Exception as e:
+        logger.error(f"Failed to get positions by creator {creator_id}: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to update position: {exc}",
-        ) from exc
-
-    if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to update position")
-
-    return coerce_position(result.data[0])
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve positions"
+        )
 
 
-@router.delete("/{position_id}", status_code=204, response_model=None)
-def delete_position(
-    position_id: str,
-    supabase: Annotated[Client, Depends(get_supabase)],
-) -> None:
+@router.get(
+    "/by-side/{side}",
+    response_model=list[PositionResponse],
+    summary="Get positions by side",
+    description="Retrieve all positions with a specific side"
+)
+async def get_positions_by_side(
+    side: Side,
+    db: Client = Depends(get_db_client)
+):
+    """
+    Get all positions with a specific side.
+
+    - **side**: The side to filter by (TEAM_A or TEAM_B)
+    """
+    service = get_position_service(db)
+    try:
+        positions = await service.get_positions_by_side(side)
+        return positions
+    except Exception as e:
+        logger.error(f"Failed to get positions by side {side}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve positions"
+        )
+
+
+@router.patch(
+    "/{position_id}",
+    response_model=PositionResponse,
+    summary="Update position",
+    description="Update an existing position's data"
+)
+async def update_position(
+    position_id: int,
+    position_data: PositionUpdate,
+    db: Client = Depends(get_db_client)
+):
+    """
+    Update a position by ID. Only provided fields will be updated.
+
+    - **position_id**: The unique ID of the position to update
+    - **challenge_id**: New challenge ID (optional)
+    - **bet**: New bet amount (optional)
+    - **side**: New side (optional)
+    - **creator**: New creator ID (optional)
+    """
+    service = get_position_service(db)
+    try:
+        position = await service.update_position(position_id, position_data)
+        if not position:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Position with ID {position_id} not found"
+            )
+        return position
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update position {position_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update position"
+        )
+
+
+@router.delete(
+    "/{position_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete position",
+    description="Delete a position by its ID"
+)
+async def delete_position(
+    position_id: int,
+    db: Client = Depends(get_db_client)
+):
     """
     Delete a position by its ID.
 
-    Example:
-        curl -X DELETE http://localhost:8000/positions/123e4567-e89b-12d3-a456-426614174000
+    - **position_id**: The unique ID of the position to delete
     """
-    # First check if position exists
+    service = get_position_service(db)
     try:
-        existing = (
-            supabase.table("positions")
-            .select("id")
-            .eq("id", position_id)
-            .limit(1)
-            .execute()
+        deleted = await service.delete_position(position_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Position with ID {position_id} not found"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete position {position_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete position"
         )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch position: {exc}",
-        ) from exc
-
-    if not existing.data:
-        raise HTTPException(status_code=404, detail="Position not found")
-
-    try:
-        supabase.table("positions").delete().eq("id", position_id).execute()
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete position: {exc}",
-        ) from exc
