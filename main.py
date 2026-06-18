@@ -8,8 +8,9 @@ successful Solana transaction.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from config import settings
 from services.database import db_service, get_db_client
@@ -17,7 +18,7 @@ from services.challenge_monitor_service import (
     start_challenge_monitor,
     stop_challenge_monitor,
 )
-from routes import users, challenges, positions
+from routes import users, challenges, positions, email_subscription
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -84,6 +85,26 @@ app.add_middleware(
 )
 
 
+# Handle OPTIONS preflight requests globally
+@app.options("/{path:path}")
+async def handle_options(request: Request, path: str):
+    """
+    Handle CORS preflight requests for all routes.
+    This ensures OPTIONS requests return a 200 OK response.
+    """
+    origin = request.headers.get("origin", "")
+    if origin in settings.cors_origins:
+        headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "86400",
+        }
+        return Response(status_code=200, headers=headers)
+    return Response(status_code=200)
+
+
 @app.get("/health")
 async def health_check():
     """
@@ -105,6 +126,9 @@ app.include_router(challenges.router, prefix="/api", tags=["challenges"])
 
 # Include position routes
 app.include_router(positions.router, prefix="/api", tags=["positions"])
+
+# Include email subscription routes
+app.include_router(email_subscription.router)
 
 # Future routers (to be added as needed)
 # app.include_router(transactions.router, prefix="/api/v1/transactions", tags=["transactions"])

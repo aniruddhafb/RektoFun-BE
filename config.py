@@ -22,8 +22,17 @@ class Settings:
     # CORS Settings
     @property
     def cors_origins(self) -> List[str]:
-        origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173")
-        return [origin.strip() for origin in origins.split(",")]
+        origins = os.getenv("CORS_ORIGINS", "")
+        origins_list = [origin.strip() for origin in origins.split(",") if origin.strip()]
+        # Always include production and local development origins
+        default_origins = [
+            "https://rekto.fun",
+            "https://www.rekto.fun",
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:3000"
+        ]
+        return list(set(origins_list + default_origins))
 
     # Supabase Settings
     supabase_url: str = os.getenv("SUPABASE_URL", "")
