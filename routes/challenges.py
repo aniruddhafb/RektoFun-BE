@@ -81,6 +81,7 @@ async def create_challenge(
     - **direction**: Direction of the challenge - UP or DOWN (optional)
     - **expiry**: Expiry date for the challenge in YYYY-MM-DD format (optional)
     - **resolution_date**: Date when the challenge will be resolved in YYYY-MM-DD format (optional)
+    - **category**: Category of the challenge (optional)
     """
     service = get_challenge_service(db)
     position_service = get_position_service(db)
@@ -262,6 +263,7 @@ async def update_challenge(
     - **direction**: New direction - UP or DOWN (optional)
     - **expiry**: New expiry date in YYYY-MM-DD format (optional)
     - **resolution_date**: New resolution date in YYYY-MM-DD format (optional)
+    - **category**: New category (optional)
     """
     service = get_challenge_service(db)
     try:

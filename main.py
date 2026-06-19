@@ -18,7 +18,7 @@ from services.challenge_monitor_service import (
     start_challenge_monitor,
     stop_challenge_monitor,
 )
-from routes import users, challenges, positions, email_subscription
+from routes import users, challenges, positions, email_subscription, categories
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -132,6 +132,9 @@ app.include_router(positions.router, prefix="/api", tags=["positions"])
 
 # Include email subscription routes
 app.include_router(email_subscription.router)
+
+# Include category routes
+app.include_router(categories.router, prefix="/api", tags=["categories"])
 
 # Future routers (to be added as needed)
 # app.include_router(transactions.router, prefix="/api/v1/transactions", tags=["transactions"])
