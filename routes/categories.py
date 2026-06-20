@@ -26,6 +26,14 @@ async def list_categories_with_challenges():
     return categories
 
 
+@router.get("/by-parent/{parent_category}", response_model=list[CategoryResponse])
+async def get_child_categories(parent_category: str):
+    """Get all child categories for a given parent category"""
+    service = get_category_service()
+    categories = service.get_child_categories(parent_category)
+    return categories
+
+
 @router.get("/{category_id}", response_model=CategoryResponse)
 async def get_category(category_id: int):
     """Get a category by ID"""

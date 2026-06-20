@@ -12,7 +12,7 @@ class CategoryBase(BaseModel):
     """Base category model with common attributes"""
     category: str = Field(..., description="Category name")
     challenges_count: Optional[int] = Field(None, description="Number of challenges in this category")
-    child_category: Optional[str] = Field(None, description="Child category name")
+    parent_category: Optional[str] = Field(None, description="Child category name")
 
 
 class CategoryCreate(CategoryBase):
@@ -24,7 +24,7 @@ class CategoryUpdate(BaseModel):
     """Model for updating an existing category - all fields optional"""
     category: Optional[str] = Field(None, description="Category name")
     challenges_count: Optional[int] = Field(None, description="Number of challenges in this category")
-    child_category: Optional[str] = Field(None, description="Child category name")
+    parent_category: Optional[str] = Field(None, description="Child category name")
 
 
 class CategoryResponse(CategoryBase):
