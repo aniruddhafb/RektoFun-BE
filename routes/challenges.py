@@ -88,6 +88,7 @@ async def create_challenge(
     try:
         # Create the challenge first
         challenge = await service.create_challenge(challenge_data)
+        print("challenge", challenge)
         
         # Create a position for the challenge creator
         position_data = PositionCreate(
@@ -96,14 +97,15 @@ async def create_challenge(
             side=Side.TEAM_A,
             creator=challenge.creator
         )
-        await position_service.create_position(position_data)
-        
+        created_position = await position_service.create_position(position_data)
+        print("created_position", created_position)
         # Start monitoring the challenge for price targets
         # Only monitor if it has a ticker and target price
         if challenge.ticker and challenge.target:
             challenge_dict = challenge.model_dump()
             await monitor_new_challenge(challenge_dict)
             logger.info(f"Started monitoring challenge {challenge.id} for price target")
+            
         
         return challenge
     except Exception as e:
